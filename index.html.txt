@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>For You | A Digital Letter</title>
+    
+    <!-- Fonts: Editorial New (Serif) + Inter (Sans) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,400&family=Inter:wght@200;400;600&display=swap" rel="stylesheet">
+    
+    <!-- GSAP for High-End Animation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- Three.js for 3D Background -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #050505;
+            --text-main: #f0f0f0;
+            --text-muted: #888888;
+            --accent: #bfa2db; /* Soft Lavender */
+            --accent-glow: rgba(191, 162, 219, 0.4);
+            --grain-opacity: 0.05;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Guided experience, no scroll initially */
+            height: 100vh;
+            width: 100vw;
+            cursor: none; /* Custom cursor */
+        }
+
+        /* --- Grain Texture --- */
+        .grain-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 900;
+            opacity: var(--grain-opacity);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* --- Custom Cursor --- */
+        .cursor-dot, .cursor-outline {
+            position: fixed;
+            top: 0; left: 0;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            z-index: 9999;
+            pointer-events: none;
+        }
+        .cursor-dot {
+            width: 8px; height: 8px;
+            background-color: white;
+        }
+        .cursor-outline {
+            width: 40px; height: 40px;
+            border: 1px solid rgba(255,255,255,0.3);
+            transition: width 0.2s, height 0.2s, background-color 0.2s;
+        }
+
+        /* --- 3D Canvas --- */
+        #webgl-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 0;
+            opacity: 0.6;
+        }
+
+        /* --- Layout Containers --- */
+        .screen-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            opacity: 0;
+            pointer-events: none; /* Disabled until active */
+            transition: opacity 1s ease;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .screen-container.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* --- Typography --- */
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 300;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            mix-blend-mode: difference;
+            margin-bottom: 1rem;
+        }
+        
+        h1 span {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        p {
+            font-size: clamp(1rem, 2vw, 1.2rem);
+            color: var(--text-muted);
+            max-width: 600px;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+            font-weight: 200;
+        }
+
+        .accent-text {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        /* --- Interactive Elements --- */
+        .btn {
+            background: transparent;
+            color: var(--text-main);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 1rem 2.5rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .btn:hover {
+            background: var(--text-main);
+            color: var(--bg-color);
+            border-color: var(--text-main);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        /* --- Progress Bar --- */
+        .progress-lines {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 20;
+        }
+        .line {
+            width: 40px;
+            height: 2px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            transition: background 0.5s ease;
+        }
+        .line.active { background: var(--accent); }
+
+        /* --- Specific Scene Styling --- */
+        .polaroid-stack {
+            position: relative;
+            width: 300px;
+            height: 400px;
+            margin: 0 auto 2rem;
+            display: none; /* Hidden by default, shown via JS */
+        }
+        
+        /* Placeholder for photos - pure CSS art */
+        .css-photo {
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #222, #333);
+            border: 10px solid white;
+            border-bottom: 40px solid white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: absolute;
+            top:0; left:0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #111;
+            font-family: 'Cormorant Garamond';
+            font-size: 1.5rem;
+        }
+
+        /* Heartbeat Animation */
+        .heart-container {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            margin-bottom: 2rem;
+        }
+        .heart-svg {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+            overflow: visible;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Noise Texture -->
+    <div class="grain-overlay"></div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+
+    <!-- 3D Background -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- Navigation / Progress -->
+    <div class="progress-lines">
+        <div class="line" id="l1"></div>
+        <div class="line" id="l2"></div>
+        <div class="line" id="l3"></div>
+        <div class="line" id="l4"></div>
+    </div>
+
+    <!-- SCENE 1: INTRO -->
+    <section class="screen-container active" id="scene-1">
+        <h1 id="title-1">Hey, You.</h1>
+        <p>I made this little corner of the internet just for us. <br>Put on your headphones, take a breath.</p>
+        <button class="btn" id="start-btn">Enter Experience</button>
+    </section>
+
+    <!-- SCENE 2: REFLECTION -->
+    <section class="screen-container" id="scene-2">
+        <div class="polaroid-stack">
+            <div class="css-photo" style="transform: rotate(-5deg);">Us.</div>
+            <div class="css-photo" style="transform: rotate(3deg); z-index:2;">Memories.</div>
+        </div>
+        <h1>Time Stops <br><span class="accent-text">With You</span></h1>
+        <p>Every moment we share feels like a movie scene I never want to end. In a world that moves too fast, you are my stillness.</p>
+        <button class="btn next-step">Continue</button>
+    </section>
+
+    <!-- SCENE 3: THE LETTER -->
+    <section class="screen-container" id="scene-3">
+        <h1>Since 2025...</h1>
+        <p style="max-width: 700px; text-align: left; border-left: 1px solid var(--accent); padding-left: 20px;">
+            I realized that "home" isn't a place anymore. It's a person. <br><br>
+            You've seen me at my best and my worst, and somehow, you still look at me like I'm magic. I just wanted to take a second, freeze time, and tell you: <br><br>
+            <strong style="color: white;">I appreciate you. I adore you. I love you.</strong>
+        </p>
+        <button class="btn next-step">One Last Thing</button>
+    </section>
+
+    <!-- SCENE 4: INTERACTIVE FINALE -->
+    <section class="screen-container" id="scene-4">
+        <div class="heart-container">
+            <svg class="heart-svg" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+        </div>
+        <h1>My Heart is Yours</h1>
+        <p>Hold the button below to send a signal.</p>
+        <button class="btn" id="send-love-btn">Hold to Send Love</button>
+    </section>
+
+    <script>
+        // --- 1. CURSOR LOGIC ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+
+        window.addEventListener('mousemove', (e) => {
+            const posX = e.clientX;
+            const posY = e.clientY;
+
+            cursorDot.style.left = `${posX}px`;
+            cursorDot.style.top = `${posY}px`;
+
+            // Small delay for outline (smooth follow)
+            cursorOutline.animate({
+                left: `${posX}px`,
+                top: `${posY}px`
+            }, { duration: 500, fill: "forwards" });
+        });
+
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                cursorOutline.style.width = '60px';
+                cursorOutline.style.height = '60px';
+                cursorOutline.style.backgroundColor = 'rgba(255,255,255,0.1)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                cursorOutline.style.width = '40px';
+                cursorOutline.style.height = '40px';
+                cursorOutline.style.backgroundColor = 'transparent';
+            });
+        });
+
+        // --- 2. THREE.JS BACKGROUND (Particle Morphing) ---
+        const canvas = document.querySelector('#webgl-canvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Particles
+        const particlesGeometry = new THREE.BufferGeometry();
+        const counts = 3000;
+        const positions = new Float32Array(counts * 3);
+
+        for(let i = 0; i < counts * 3; i++) {
+            positions[i] = (Math.random() - 0.5) * 15; // Spread
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.03,
+            color: 0xbfa2db, // Lavender
+            transparent: true,
+            opacity: 0.8,
+        });
+
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        camera.position.z = 3;
+
+        // Animation Loop
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetX = 0;
+        let targetY = 0;
+        
+        const windowHalfX = window.innerWidth / 2;
+        const windowHalfY = window.innerHeight / 2;
+
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX - windowHalfX);
+            mouseY = (event.clientY - windowHalfY);
+        });
+
+        const clock = new THREE.Clock();
+
+        const tick = () => {
+            const elapsedTime = clock.getElapsedTime();
+
+            targetX = mouseX * 0.001;
+            targetY = mouseY * 0.001;
+
+            particlesMesh.rotation.y += 0.5 * (targetX - particlesMesh.rotation.y);
+            particlesMesh.rotation.x += 0.05 * (targetY - particlesMesh.rotation.x);
+            
+            // Gentle floating
+            particlesMesh.position.y = Math.sin(elapsedTime * 0.5) * 0.1;
+            
+            // Warp effect based on progress
+            if(experienceStarted) {
+                 particlesMesh.rotation.z += 0.002;
+            }
+
+            renderer.render(scene, camera);
+            window.requestAnimationFrame(tick);
+        }
+        tick();
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+
+        // --- 3. AUDIO SYSTEM (Generative Ambient) ---
+        let audioCtx;
+        let gainNode;
+        let experienceStarted = false;
+
+        function initAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.1; // Low volume
+            gainNode.connect(audioCtx.destination);
+
+            // Create a low drone
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(110, audioCtx.currentTime); // A2
+            osc.connect(gainNode);
+            osc.start();
+            
+            // Add a second harmony layer
+            const osc2 = audioCtx.createOscillator();
+            osc2.type = 'triangle';
+            osc2.frequency.setValueAtTime(164.81, audioCtx.currentTime); // E3
+            osc2.connect(gainNode);
+            osc2.start();
+        }
+
+
+        // --- 4. APP FLOW / GSAP ANIMATIONS ---
+        let currentScene = 1;
+        const scenes = [
+            document.getElementById('scene-1'),
+            document.getElementById('scene-2'),
+            document.getElementById('scene-3'),
+            document.getElementById('scene-4')
+        ];
+        const lines = document.querySelectorAll('.line');
+
+        // Helper: Split text for animation
+        function animateTextEntry(elementId) {
+            const el = document.querySelector(elementId);
+            // Simple fade up for now to keep it robust
+            gsap.fromTo(el, 
+                { opacity: 0, y: 30 }, 
+                { opacity: 1, y: 0, duration: 1.5, ease: "power3.out", delay: 0.2 }
+            );
+        }
+
+        // Initial Animation
+        animateTextEntry('#title-1');
+
+        function switchScene(index) {
+            // Fade out current
+            gsap.to(scenes[currentScene - 1], {
+                opacity: 0,
+                duration: 0.5,
+                onComplete: () => {
+                    scenes[currentScene - 1].classList.remove('active');
+                    scenes[currentScene - 1].style.display = 'none';
+                    
+                    // Update State
+                    currentScene = index;
+                    const newScene = scenes[currentScene - 1];
+                    
+                    newScene.style.display = 'flex';
+                    // Need small delay for display:flex to apply before opacity
+                    setTimeout(() => {
+                        newScene.classList.add('active');
+                        gsap.fromTo(newScene.children, 
+                            { y: 30, opacity: 0 },
+                            { y: 0, opacity: 1, duration: 1, stagger: 0.2, ease: "power3.out" }
+                        );
+                    }, 50);
+                    
+                    // Update Progress Lines
+                    lines.forEach((line, i) => {
+                        if(i < currentScene) line.classList.add('active');
+                        else line.classList.remove('active');
+                    });
+
+                    // Scene Specific Logic
+                    if(currentScene === 2) {
+                        document.querySelector('.polaroid-stack').style.display = 'block';
+                        // Warp particles faster
+                        gsap.to(particlesMaterial, { size: 0.05, duration: 2 });
+                    }
+                    if(currentScene === 4) {
+                        // Heartbeat animation
+                        gsap.to('.heart-svg', { 
+                            scale: 1.2, 
+                            duration: 0.8, 
+                            repeat: -1, 
+                            yoyo: true, 
+                            ease: "sine.inOut" 
+                        });
+                    }
+                }
+            });
+        }
+
+        // Button Listeners
+        document.getElementById('start-btn').addEventListener('click', () => {
+            experienceStarted = true;
+            initAudio();
+            lines[0].classList.add('active');
+            switchScene(2);
+        });
+
+        document.querySelectorAll('.next-step').forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchScene(currentScene + 1);
+            });
+        });
+
+        // Hold to Send Love Logic
+        const sendBtn = document.getElementById('send-love-btn');
+        let holdTimer;
+
+        sendBtn.addEventListener('mousedown', () => {
+            gsap.to(sendBtn, { scale: 0.95, duration: 0.1 });
+            
+            // Visual feedback for holding
+            gsap.to('.heart-svg', { scale: 2, duration: 2, ease: "power1.in" });
+            
+            holdTimer = setTimeout(() => {
+                // SUCCESS
+                sendBtn.innerText = "Sent!";
+                
+                // Create explosion of particles (simple background color shift for now)
+                gsap.to('body', { backgroundColor: '#bfa2db', duration: 0.2, yoyo: true, repeat: 1 });
+                gsap.to('.heart-svg', { stroke: '#fff', duration: 0.5 });
+                
+                // Confetti-ish effect with ThreeJS
+                particlesMaterial.color.setHex(0xffffff);
+                particlesMaterial.size = 0.1;
+                
+                // Play success tone
+                const osc3 = audioCtx.createOscillator();
+                osc3.type = 'sine';
+                osc3.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc3.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.5);
+                const g = audioCtx.createGain();
+                g.gain.value = 0.1;
+                g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc3.connect(g);
+                g.connect(audioCtx.destination);
+                osc3.start();
+                osc3.stop(audioCtx.currentTime + 0.5);
+
+            }, 2000);
+        });
+
+        sendBtn.addEventListener('mouseup', () => {
+            clearTimeout(holdTimer);
+            gsap.to(sendBtn, { scale: 1, duration: 0.5 });
+            if(sendBtn.innerText !== "Sent!") {
+                gsap.to('.heart-svg', { scale: 1.2, duration: 0.5 }); // return to heartbeat
+            }
+        });
+
+    </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>For You | A Digital Letter</title>
+    
+    <!-- Fonts: Editorial New (Serif) + Inter (Sans) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,400&family=Inter:wght@200;400;600&display=swap" rel="stylesheet">
+    
+    <!-- GSAP for High-End Animation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <!-- Three.js for 3D Background -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #050505;
+            --text-main: #f0f0f0;
+            --text-muted: #888888;
+            --accent: #bfa2db; /* Soft Lavender */
+            --accent-glow: rgba(191, 162, 219, 0.4);
+            --grain-opacity: 0.05;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Guided experience, no scroll initially */
+            height: 100vh;
+            width: 100vw;
+            cursor: none; /* Custom cursor */
+        }
+
+        /* --- Grain Texture --- */
+        .grain-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 900;
+            opacity: var(--grain-opacity);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* --- Custom Cursor --- */
+        .cursor-dot, .cursor-outline {
+            position: fixed;
+            top: 0; left: 0;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            z-index: 9999;
+            pointer-events: none;
+        }
+        .cursor-dot {
+            width: 8px; height: 8px;
+            background-color: white;
+        }
+        .cursor-outline {
+            width: 40px; height: 40px;
+            border: 1px solid rgba(255,255,255,0.3);
+            transition: width 0.2s, height 0.2s, background-color 0.2s;
+        }
+
+        /* --- 3D Canvas --- */
+        #webgl-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 0;
+            opacity: 0.6;
+        }
+
+        /* --- Layout Containers --- */
+        .screen-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            opacity: 0;
+            pointer-events: none; /* Disabled until active */
+            transition: opacity 1s ease;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .screen-container.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* --- Typography --- */
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 300;
+            line-height: 1.1;
+            letter-spacing: -0.02em;
+            mix-blend-mode: difference;
+            margin-bottom: 1rem;
+        }
+        
+        h1 span {
+            display: inline-block;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        p {
+            font-size: clamp(1rem, 2vw, 1.2rem);
+            color: var(--text-muted);
+            max-width: 600px;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+            font-weight: 200;
+        }
+
+        .accent-text {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        /* --- Interactive Elements --- */
+        .btn {
+            background: transparent;
+            color: var(--text-main);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 1rem 2.5rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .btn:hover {
+            background: var(--text-main);
+            color: var(--bg-color);
+            border-color: var(--text-main);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        /* --- Progress Bar --- */
+        .progress-lines {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 20;
+        }
+        .line {
+            width: 40px;
+            height: 2px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            transition: background 0.5s ease;
+        }
+        .line.active { background: var(--accent); }
+
+        /* --- Specific Scene Styling --- */
+        .polaroid-stack {
+            position: relative;
+            width: 300px;
+            height: 400px;
+            margin: 0 auto 2rem;
+            display: none; /* Hidden by default, shown via JS */
+        }
+        
+        /* Placeholder for photos - pure CSS art */
+        .css-photo {
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #222, #333);
+            border: 10px solid white;
+            border-bottom: 40px solid white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: absolute;
+            top:0; left:0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #111;
+            font-family: 'Cormorant Garamond';
+            font-size: 1.5rem;
+        }
+
+        /* Heartbeat Animation */
+        .heart-container {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            margin-bottom: 2rem;
+        }
+        .heart-svg {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+            overflow: visible;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Noise Texture -->
+    <div class="grain-overlay"></div>
+
+    <!-- Custom Cursor -->
+    <div class="cursor-dot"></div>
+    <div class="cursor-outline"></div>
+
+    <!-- 3D Background -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <!-- Navigation / Progress -->
+    <div class="progress-lines">
+        <div class="line" id="l1"></div>
+        <div class="line" id="l2"></div>
+        <div class="line" id="l3"></div>
+        <div class="line" id="l4"></div>
+    </div>
+
+    <!-- SCENE 1: INTRO -->
+    <section class="screen-container active" id="scene-1">
+        <h1 id="title-1">Hey, You.</h1>
+        <p>I made this little corner of the internet just for us. <br>Put on your headphones, take a breath.</p>
+        <button class="btn" id="start-btn">Enter Experience</button>
+    </section>
+
+    <!-- SCENE 2: REFLECTION -->
+    <section class="screen-container" id="scene-2">
+        <div class="polaroid-stack">
+            <div class="css-photo" style="transform: rotate(-5deg);">Us.</div>
+            <div class="css-photo" style="transform: rotate(3deg); z-index:2;">Memories.</div>
+        </div>
+        <h1>Time Stops <br><span class="accent-text">With You</span></h1>
+        <p>Every moment we share feels like a movie scene I never want to end. In a world that moves too fast, you are my stillness.</p>
+        <button class="btn next-step">Continue</button>
+    </section>
+
+    <!-- SCENE 3: THE LETTER -->
+    <section class="screen-container" id="scene-3">
+        <h1>Since 2025...</h1>
+        <p style="max-width: 700px; text-align: left; border-left: 1px solid var(--accent); padding-left: 20px;">
+            I realized that "home" isn't a place anymore. It's a person. <br><br>
+            You've seen me at my best and my worst, and somehow, you still look at me like I'm magic. I just wanted to take a second, freeze time, and tell you: <br><br>
+            <strong style="color: white;">I appreciate you. I adore you. I love you.</strong>
+        </p>
+        <button class="btn next-step">One Last Thing</button>
+    </section>
+
+    <!-- SCENE 4: INTERACTIVE FINALE -->
+    <section class="screen-container" id="scene-4">
+        <div class="heart-container">
+            <svg class="heart-svg" viewBox="0 0 24 24">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+        </div>
+        <h1>My Heart is Yours</h1>
+        <p>Hold the button below to send a signal.</p>
+        <button class="btn" id="send-love-btn">Hold to Send Love</button>
+    </section>
+
+    <script>
+        // --- 1. CURSOR LOGIC ---
+        const cursorDot = document.querySelector('.cursor-dot');
+        const cursorOutline = document.querySelector('.cursor-outline');
+
+        window.addEventListener('mousemove', (e) => {
+            const posX = e.clientX;
+            const posY = e.clientY;
+
+            cursorDot.style.left = `${posX}px`;
+            cursorDot.style.top = `${posY}px`;
+
+            // Small delay for outline (smooth follow)
+            cursorOutline.animate({
+                left: `${posX}px`,
+                top: `${posY}px`
+            }, { duration: 500, fill: "forwards" });
+        });
+
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                cursorOutline.style.width = '60px';
+                cursorOutline.style.height = '60px';
+                cursorOutline.style.backgroundColor = 'rgba(255,255,255,0.1)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                cursorOutline.style.width = '40px';
+                cursorOutline.style.height = '40px';
+                cursorOutline.style.backgroundColor = 'transparent';
+            });
+        });
+
+        // --- 2. THREE.JS BACKGROUND (Particle Morphing) ---
+        const canvas = document.querySelector('#webgl-canvas');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Particles
+        const particlesGeometry = new THREE.BufferGeometry();
+        const counts = 3000;
+        const positions = new Float32Array(counts * 3);
+
+        for(let i = 0; i < counts * 3; i++) {
+            positions[i] = (Math.random() - 0.5) * 15; // Spread
+        }
+
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.03,
+            color: 0xbfa2db, // Lavender
+            transparent: true,
+            opacity: 0.8,
+        });
+
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+        camera.position.z = 3;
+
+        // Animation Loop
+        let mouseX = 0;
+        let mouseY = 0;
+        let targetX = 0;
+        let targetY = 0;
+        
+        const windowHalfX = window.innerWidth / 2;
+        const windowHalfY = window.innerHeight / 2;
+
+        document.addEventListener('mousemove', (event) => {
+            mouseX = (event.clientX - windowHalfX);
+            mouseY = (event.clientY - windowHalfY);
+        });
+
+        const clock = new THREE.Clock();
+
+        const tick = () => {
+            const elapsedTime = clock.getElapsedTime();
+
+            targetX = mouseX * 0.001;
+            targetY = mouseY * 0.001;
+
+            particlesMesh.rotation.y += 0.5 * (targetX - particlesMesh.rotation.y);
+            particlesMesh.rotation.x += 0.05 * (targetY - particlesMesh.rotation.x);
+            
+            // Gentle floating
+            particlesMesh.position.y = Math.sin(elapsedTime * 0.5) * 0.1;
+            
+            // Warp effect based on progress
+            if(experienceStarted) {
+                 particlesMesh.rotation.z += 0.002;
+            }
+
+            renderer.render(scene, camera);
+            window.requestAnimationFrame(tick);
+        }
+        tick();
+
+        // Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+
+        // --- 3. AUDIO SYSTEM (Generative Ambient) ---
+        let audioCtx;
+        let gainNode;
+        let experienceStarted = false;
+
+        function initAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0.1; // Low volume
+            gainNode.connect(audioCtx.destination);
+
+            // Create a low drone
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(110, audioCtx.currentTime); // A2
+            osc.connect(gainNode);
+            osc.start();
+            
+            // Add a second harmony layer
+            const osc2 = audioCtx.createOscillator();
+            osc2.type = 'triangle';
+            osc2.frequency.setValueAtTime(164.81, audioCtx.currentTime); // E3
+            osc2.connect(gainNode);
+            osc2.start();
+        }
+
+
+        // --- 4. APP FLOW / GSAP ANIMATIONS ---
+        let currentScene = 1;
+        const scenes = [
+            document.getElementById('scene-1'),
+            document.getElementById('scene-2'),
+            document.getElementById('scene-3'),
+            document.getElementById('scene-4')
+        ];
+        const lines = document.querySelectorAll('.line');
+
+        // Helper: Split text for animation
+        function animateTextEntry(elementId) {
+            const el = document.querySelector(elementId);
+            // Simple fade up for now to keep it robust
+            gsap.fromTo(el, 
+                { opacity: 0, y: 30 }, 
+                { opacity: 1, y: 0, duration: 1.5, ease: "power3.out", delay: 0.2 }
+            );
+        }
+
+        // Initial Animation
+        animateTextEntry('#title-1');
+
+        function switchScene(index) {
+            // Fade out current
+            gsap.to(scenes[currentScene - 1], {
+                opacity: 0,
+                duration: 0.5,
+                onComplete: () => {
+                    scenes[currentScene - 1].classList.remove('active');
+                    scenes[currentScene - 1].style.display = 'none';
+                    
+                    // Update State
+                    currentScene = index;
+                    const newScene = scenes[currentScene - 1];
+                    
+                    newScene.style.display = 'flex';
+                    // Need small delay for display:flex to apply before opacity
+                    setTimeout(() => {
+                        newScene.classList.add('active');
+                        gsap.fromTo(newScene.children, 
+                            { y: 30, opacity: 0 },
+                            { y: 0, opacity: 1, duration: 1, stagger: 0.2, ease: "power3.out" }
+                        );
+                    }, 50);
+                    
+                    // Update Progress Lines
+                    lines.forEach((line, i) => {
+                        if(i < currentScene) line.classList.add('active');
+                        else line.classList.remove('active');
+                    });
+
+                    // Scene Specific Logic
+                    if(currentScene === 2) {
+                        document.querySelector('.polaroid-stack').style.display = 'block';
+                        // Warp particles faster
+                        gsap.to(particlesMaterial, { size: 0.05, duration: 2 });
+                    }
+                    if(currentScene === 4) {
+                        // Heartbeat animation
+                        gsap.to('.heart-svg', { 
+                            scale: 1.2, 
+                            duration: 0.8, 
+                            repeat: -1, 
+                            yoyo: true, 
+                            ease: "sine.inOut" 
+                        });
+                    }
+                }
+            });
+        }
+
+        // Button Listeners
+        document.getElementById('start-btn').addEventListener('click', () => {
+            experienceStarted = true;
+            initAudio();
+            lines[0].classList.add('active');
+            switchScene(2);
+        });
+
+        document.querySelectorAll('.next-step').forEach(btn => {
+            btn.addEventListener('click', () => {
+                switchScene(currentScene + 1);
+            });
+        });
+
+        // Hold to Send Love Logic
+        const sendBtn = document.getElementById('send-love-btn');
+        let holdTimer;
+
+        sendBtn.addEventListener('mousedown', () => {
+            gsap.to(sendBtn, { scale: 0.95, duration: 0.1 });
+            
+            // Visual feedback for holding
+            gsap.to('.heart-svg', { scale: 2, duration: 2, ease: "power1.in" });
+            
+            holdTimer = setTimeout(() => {
+                // SUCCESS
+                sendBtn.innerText = "Sent!";
+                
+                // Create explosion of particles (simple background color shift for now)
+                gsap.to('body', { backgroundColor: '#bfa2db', duration: 0.2, yoyo: true, repeat: 1 });
+                gsap.to('.heart-svg', { stroke: '#fff', duration: 0.5 });
+                
+                // Confetti-ish effect with ThreeJS
+                particlesMaterial.color.setHex(0xffffff);
+                particlesMaterial.size = 0.1;
+                
+                // Play success tone
+                const osc3 = audioCtx.createOscillator();
+                osc3.type = 'sine';
+                osc3.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc3.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.5);
+                const g = audioCtx.createGain();
+                g.gain.value = 0.1;
+                g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc3.connect(g);
+                g.connect(audioCtx.destination);
+                osc3.start();
+                osc3.stop(audioCtx.currentTime + 0.5);
+
+            }, 2000);
+        });
+
+        sendBtn.addEventListener('mouseup', () => {
+            clearTimeout(holdTimer);
+            gsap.to(sendBtn, { scale: 1, duration: 0.5 });
+            if(sendBtn.innerText !== "Sent!") {
+                gsap.to('.heart-svg', { scale: 1.2, duration: 0.5 }); // return to heartbeat
+            }
+        });
+
+    </script>
+</body>
+</html>
